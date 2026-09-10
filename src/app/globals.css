@@ -1,0 +1,69 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body {
+  background: #1c2541;
+  color: #f4efe1;
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  min-height: 100dvh;
+}
+
+/* The stamp on a collected checkpoint sits at a slight angle, like a real one. */
+.stamp-filled {
+  transform: rotate(-6deg);
+}
+
+/* Fields sit on parchment panels, so they need light-surface styling even
+   though the page itself is dark. */
+.field {
+  @apply w-full rounded-md border px-3 py-2 text-sm;
+  border-color: #d8cfb2;
+  background: #fffdf6;
+  color: #14181f;
+}
+.field::placeholder {
+  color: #9a8f6d;
+}
+.field:focus {
+  outline: 2px solid #c9a227;
+  outline-offset: 1px;
+}
+
+/* html5-qrcode injects its own chrome; trim it down to just the video. */
+#qr-reader {
+  width: 100% !important;
+  border: none !important;
+}
+#qr-reader video {
+  width: 100% !important;
+  border-radius: 8px;
+  display: block;
+}
+#qr-reader img[alt="Info icon"],
+#qr-reader__dashboard_section_csr span:last-child {
+  display: none !important;
+}
+
+@media print {
+  .no-print {
+    display: none !important;
+  }
+  html,
+  body {
+    background: #fff;
+    color: #000;
+  }
+  .print-page {
+    page-break-after: always;
+  }
+}
