@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ShieldAlert, Printer, RotateCcw, Check, X, Trash2 } from "lucide-react";
+import { ShieldAlert, Printer, RotateCcw, Check, X, Trash2, Eye, EyeOff, Timer } from "lucide-react";
 import { GoldButton, GhostButton, Panel, Tabs } from "@/components/ui";
 import Leaderboard from "@/components/Leaderboard";
+import { formatElapsed } from "@/lib/format";
 import { PENALTY_TYPES, SPIRIT_VALUES, SPEED_POINTS } from "@/lib/scoring";
 
 const POLL_MS = 10_000;
@@ -86,6 +87,7 @@ export default function AdminDashboard({ initialView }) {
             ["bonus", "Bonus review", pendingBonuses.length || null],
             ["final", "Final challenge", pendingFinals.length || null],
             ["penalties", "Penalties & spirit"],
+            ["guests", "Guests"],
             ["qr", "QR codes"],
             ["leaderboard", "Leaderboard"],
             ["danger", "Reset"],
@@ -104,6 +106,7 @@ export default function AdminDashboard({ initialView }) {
         {tab === "bonus" && <BonusTab items={pendingBonuses} view={view} post={post} busy={busy} />}
         {tab === "final" && <FinalTab view={view} post={post} busy={busy} />}
         {tab === "penalties" && <PenaltiesTab view={view} post={post} busy={busy} />}
+        {tab === "guests" && <GuestsTab />}
         {tab === "qr" && <QrTab view={view} />}
         {tab === "leaderboard" && <Leaderboard rows={view.leaderboard} />}
         {tab === "danger" && <ResetTab post={post} busy={busy} />}
@@ -447,6 +450,138 @@ function PenaltiesTab({ view, post, busy }) {
         </Panel>
       ))}
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Guests                                                                     */
+/* -------------------------------------------------------------------------- */
+
+function GuestsTab() {
+  const [guests, setGuests] = useState(null);
+  const [error, setError] = useState("");
+
+  const load = useCallback(async () => {
+    try {
+      const res = await fetch("/api/admin/guests", { cache: "no-store" });
+      const data = await res.json();
+      if (data.ok) setGuests(data.guests);
+      else setError(data.error);
+    } catch {
+      setError("Could not load guest runs.");
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  async function setHidden(guestId, hidden) {
+    // Optimistic: the toggle should feel instant while HQ works through a list.
+    setGuests((gs) => gs.map((g) => (g.id === guestId ? { ...g, hidden } : g)));
+    const res = await fetch("/api/admin/guests", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ guestId, hidden }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      setError(data.error || "Could not update that guest.");
+      load();
+    }
+  }
+
+  if (error) {
+    return (
+      <Panel>
+        <p className="text-sm text-rust">{error}</p>
+      </Panel>
+    );
+  }
+
+  if (!guests) {
+    return (
+      <Panel>
+        <p className="text-sm text-muted">Loading guest runs…</p>
+      </Panel>
+    );
+  }
+
+  const finished = guests.filter((g) => g.finishedAt).sort((a, b) => a.elapsedMs - b.elapsedMs);
+  const playing = guests.filter((g) => !g.finishedAt);
+
+  return (
+    <div className="flex flex-col gap-3">
+      <Panel>
+        <p className="mb-2 text-xs uppercase tracking-wider text-muted">About guest runs</p>
+        <p className="text-xs text-muted">
+          Guests play solo in any order and score no points — they only appear on the public
+          hall of fame at <span className="font-mono text-gold">/leaderboard</span>, ranked by
+          time. Names are filtered on sign-up, but if something slips through, hide it here and it
+          comes off the public board immediately.
+        </p>
+      </Panel>
+
+      <GuestGroup
+        title={`Finished (${finished.length})`}
+        guests={finished}
+        onToggle={setHidden}
+        showTime
+      />
+      <GuestGroup
+        title={`Still playing (${playing.length})`}
+        guests={playing}
+        onToggle={setHidden}
+      />
+    </div>
+  );
+}
+
+function GuestGroup({ title, guests, onToggle, showTime }) {
+  if (guests.length === 0) return null;
+
+  return (
+    <Panel>
+      <p className="mb-3 flex items-center gap-1.5 text-xs uppercase tracking-wider text-gold">
+        <Timer className="h-3.5 w-3.5" /> {title}
+      </p>
+      <ul className="flex flex-col gap-2">
+        {guests.map((g) => (
+          <li
+            key={g.id}
+            className="flex flex-wrap items-center justify-between gap-2 rounded-md bg-white/5 px-3 py-2"
+          >
+            <div className="min-w-0">
+              <p className={"text-sm " + (g.hidden ? "text-muted line-through" : "text-parchment")}>
+                {g.name}
+              </p>
+              <p className="truncate text-[11px] text-muted">{g.email}</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className="text-xs text-muted">{g.solved}/7</span>
+              {showTime && (
+                <span className="font-mono text-sm font-semibold text-gold">
+                  {formatElapsed(g.elapsedMs)}
+                </span>
+              )}
+              <button
+                onClick={() => onToggle(g.id, !g.hidden)}
+                title={g.hidden ? "Show on the public board" : "Hide from the public board"}
+                className={
+                  "flex items-center gap-1 rounded border px-2 py-1 text-[11px] transition " +
+                  (g.hidden
+                    ? "border-ink-line text-muted hover:border-gold/60"
+                    : "border-rust text-rust hover:bg-rust/10")
+                }
+              >
+                {g.hidden ? <Eye className="h-3 w-3" /> : <EyeOff className="h-3 w-3" />}
+                {g.hidden ? "Unhide" : "Hide"}
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+    </Panel>
   );
 }
 

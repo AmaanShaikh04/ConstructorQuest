@@ -75,6 +75,8 @@ for (const table of [
   "bonus_submissions",
   "final_submissions",
   "penalties",
+  "guests",
+  "guest_progress",
 ]) {
   const { data, error } = await sb.from(table).select("id");
   if (error) {

@@ -58,3 +58,13 @@ export function clientKey(req) {
     "unknown"
   );
 }
+
+/**
+ * True when Supabase is reporting that a table doesn't exist — almost always
+ * because a migration hasn't been run yet, which is worth saying plainly
+ * instead of leaking "schema cache" at someone standing on campus.
+ */
+export function isMissingTable(error) {
+  if (!error) return false;
+  return error.code === "PGRST205" || /Could not find the table/i.test(error.message || "");
+}

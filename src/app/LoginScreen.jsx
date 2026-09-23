@@ -2,26 +2,28 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { MapPin, ArrowLeft } from "lucide-react";
+import Link from "next/link";
+import { MapPin, ArrowLeft, Timer } from "lucide-react";
 import { GoldButton, GhostButton } from "@/components/ui";
 
 export default function LoginScreen({ teams, configError }) {
   const router = useRouter();
-  const [mode, setMode] = useState(null); // null | 'team' | 'admin'
+  const [mode, setMode] = useState(null); // null | 'team' | 'guest' | 'admin'
   const [teamId, setTeamId] = useState("");
   const [pin, setPin] = useState("");
+  const [guestEmail, setGuestEmail] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  async function submit(role) {
+  async function send(url, payload) {
     if (busy) return;
     setBusy(true);
     setError("");
     try {
-      const res = await fetch("/api/auth/login", {
+      const res = await fetch(url, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ role, teamId, pin }),
+        body: JSON.stringify(payload),
       });
       const data = await res.json();
       if (!data.ok) {
@@ -36,6 +38,10 @@ export default function LoginScreen({ teams, configError }) {
       setBusy(false);
     }
   }
+
+  const submitTeam = () => send("/api/auth/login", { role: "team", teamId, pin });
+  const submitAdmin = () => send("/api/auth/login", { role: "admin", pin });
+  const submitGuest = () => send("/api/auth/guest", { email: guestEmail });
 
   function back() {
     setMode(null);
@@ -71,9 +77,21 @@ export default function LoginScreen({ teams, configError }) {
             <GoldButton className="py-3 text-base" onClick={() => setMode("team")}>
               Enter as a team
             </GoldButton>
-            <GhostButton className="py-3 text-base" onClick={() => setMode("admin")}>
-              Enter as HQ
+            <GhostButton className="py-3 text-base" onClick={() => setMode("guest")}>
+              Play as a guest
             </GhostButton>
+            <button
+              onClick={() => setMode("admin")}
+              className="mt-2 text-xs text-muted hover:text-parchment"
+            >
+              HQ access
+            </button>
+            <Link
+              href="/leaderboard"
+              className="flex items-center justify-center gap-1.5 text-xs text-muted hover:text-parchment"
+            >
+              <Timer className="h-3 w-3" /> Guest hall of fame
+            </Link>
           </div>
         )}
 
@@ -120,15 +138,60 @@ export default function LoginScreen({ teams, configError }) {
               className="field mb-3"
               value={pin}
               onChange={(e) => setPin(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submit("team")}
+              onKeyDown={(e) => e.key === "Enter" && submitTeam()}
               type="password"
               inputMode="numeric"
               autoComplete="off"
               placeholder="4-digit code"
             />
             {error && <p className="mb-3 text-xs text-rust">{error}</p>}
-            <GoldButton className="w-full py-2.5" disabled={busy} onClick={() => submit("team")}>
+            <GoldButton className="w-full py-2.5" disabled={busy} onClick={submitTeam}>
               {busy ? "Checking…" : "Begin the quest"}
+            </GoldButton>
+          </div>
+        )}
+
+        {mode === "guest" && (
+          <div className="rounded-lg bg-parchment p-5">
+            <BackLink onClick={back} />
+
+            <p className="mb-4 text-xs leading-relaxed text-ink-soft">
+              Play the whole quest solo, in whatever order you find the checkpoints. Guest runs
+              score no points towards the college competition — you&apos;re racing the clock, and
+              the fastest full runs go on the{" "}
+              <Link href="/leaderboard" target="_blank" className="underline">
+                hall of fame
+              </Link>
+              .
+            </p>
+
+            <label
+              htmlFor="guest-email"
+              className="mb-1 block text-xs uppercase tracking-wider text-ink-soft"
+            >
+              Constructor email
+            </label>
+            <input
+              id="guest-email"
+              className="field mb-1"
+              value={guestEmail}
+              onChange={(e) => setGuestEmail(e.target.value)}
+              onKeyDown={(e) => e.key === "Enter" && submitGuest()}
+              type="email"
+              inputMode="email"
+              autoCapitalize="none"
+              autoCorrect="off"
+              placeholder="you@constructor.university"
+              autoComplete="email"
+            />
+            <p className="mb-3 text-[11px] text-[#8b8266]">
+              Your address is never shown publicly — it just saves your run so you can pick it
+              back up. You&apos;ll be given a codename for the board.
+            </p>
+
+            {error && <p className="mb-3 text-xs text-rust">{error}</p>}
+            <GoldButton className="w-full py-2.5" disabled={busy} onClick={submitGuest}>
+              {busy ? "Starting…" : "Start the clock"}
             </GoldButton>
           </div>
         )}
@@ -147,14 +210,14 @@ export default function LoginScreen({ teams, configError }) {
               className="field mb-3"
               value={pin}
               onChange={(e) => setPin(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && submit("admin")}
+              onKeyDown={(e) => e.key === "Enter" && submitAdmin()}
               type="password"
               inputMode="numeric"
               autoComplete="off"
               placeholder="Admin code"
             />
             {error && <p className="mb-3 text-xs text-rust">{error}</p>}
-            <GoldButton className="w-full py-2.5" disabled={busy} onClick={() => submit("admin")}>
+            <GoldButton className="w-full py-2.5" disabled={busy} onClick={submitAdmin}>
               {busy ? "Checking…" : "Open HQ dashboard"}
             </GoldButton>
           </div>

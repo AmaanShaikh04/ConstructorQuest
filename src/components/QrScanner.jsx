@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Camera, CameraOff, ScanLine, Check, X, Keyboard } from "lucide-react";
-import { GoldButton, GhostButton } from "@/components/ui";
+import { GoldButton } from "@/components/ui";
 
 const READER_ID = "qr-reader";
 
@@ -219,17 +219,20 @@ export default function QrScanner({ onSubmit, disabled }) {
                   value={manualCode}
                   onChange={(e) => setManualCode(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && setDecodedFromManual()}
-                  placeholder="e.g. CQ-IRC-26"
+                  placeholder="Code printed under the QR"
                   autoCapitalize="characters"
                   autoCorrect="off"
                   spellCheck={false}
                 />
-                <GhostButton
-                  className="border-ink-soft text-ink-soft"
+                {/* A solid dark button, not a GhostButton: this sits on the
+                    parchment panel, where GhostButton's pale text disappears. */}
+                <button
+                  type="button"
                   onClick={setDecodedFromManual}
+                  className="shrink-0 rounded-md bg-ink px-4 py-2 text-sm font-semibold text-parchment transition hover:bg-ink-soft"
                 >
                   Check
-                </GhostButton>
+                </button>
               </div>
               <p className="mt-1.5 text-[11px] text-[#8b8266]">
                 Typing it still goes through the same check — it only skips the camera, not the

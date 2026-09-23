@@ -31,21 +31,20 @@ export const POST = handler(async (req) => {
   const expected = game.checkpoints[nextId];
 
   if (submitted !== expected.qrCode.toUpperCase()) {
-    // Give a more useful message when they scanned a real — but wrong — code.
-    const matched = Object.values(game.checkpoints).find(
+    // Deliberately vague. Naming the checkpoint a wrong code belongs to would
+    // hand teams a free map of the campus: scan anything, learn what it was.
+    // They get told it's wrong and nothing more.
+    const isOneOfOurs = Object.values(game.checkpoints).some(
       (c) => c.qrCode.toUpperCase() === submitted
     );
-    if (matched) {
-      const alreadyDone = team.completed.some((c) => c.checkpointId === matched.id);
+    if (isOneOfOurs) {
       return fail(
-        alreadyDone
-          ? `You've already stamped ${matched.name}. Your next stop is somewhere else — re-read the riddle.`
-          : `That's ${matched.name}'s code, but it isn't your next stop. Every team walks a different route.`,
+        "That isn't the code for your next checkpoint. Keep exploring — this one may well be useful to you later.",
         409
       );
     }
     return fail(
-      "That code isn't one of ours. Ask the volunteer to hold the printed QR steady and scan again.",
+      "That code isn't part of the quest. Ask the volunteer to hold the printed QR steady and scan again.",
       422
     );
   }

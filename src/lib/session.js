@@ -20,6 +20,12 @@ export async function requireTeam() {
   return s && s.role === "team" && s.teamId ? s.teamId : null;
 }
 
+/** Returns the guest id, or null if the caller isn't a logged-in guest. */
+export async function requireGuest() {
+  const s = await getSession();
+  return s && s.role === "guest" && s.guestId ? s.guestId : null;
+}
+
 /** Returns true if the caller is logged in as HQ. */
 export async function requireAdmin() {
   const s = await getSession();
