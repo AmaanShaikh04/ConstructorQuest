@@ -28,6 +28,9 @@ export const GET = handler(async () => {
     };
   });
 
-  const countdownAt = await getSetting("countdown_at");
-  return ok({ rows, countdownAt });
+  const [countdownAt, gameEndAt] = await Promise.all([
+    getSetting("countdown_at"),
+    getSetting("game_end_at"),
+  ]);
+  return ok({ rows, countdownAt, gameEndAt });
 });

@@ -9,13 +9,14 @@ export const GET = handler(async () => {
   const teamId = await requireTeam();
   if (!teamId) return fail("Not signed in.", 401);
 
-  const [game, countdownAt] = await Promise.all([
+  const [game, countdownAt, gameEndAt] = await Promise.all([
     loadGame(),
     getSetting("countdown_at"),
+    getSetting("game_end_at"),
   ]);
 
   const view = teamViewFrom(game, teamId);
   if (!view) return fail("Team not found.", 404);
 
-  return ok({ view, leaderboard: leaderboardFrom(game), countdownAt });
+  return ok({ view, leaderboard: leaderboardFrom(game), countdownAt, gameEndAt });
 });

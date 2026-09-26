@@ -19,6 +19,7 @@ export const POST = handler(async () => {
   const startsAt = new Date(now.getTime() + COUNTDOWN_SECONDS * 1000).toISOString();
 
   await setSetting("countdown_at", now.toISOString());
+  await setSetting("game_end_at", null);
 
   // Stamp all teams' started_at to countdown end time (overwrite any existing value).
   await db()

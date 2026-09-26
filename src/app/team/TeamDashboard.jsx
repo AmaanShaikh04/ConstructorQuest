@@ -9,14 +9,16 @@ import Leaderboard from "@/components/Leaderboard";
 import { MAX_HINTS, HINT_COST } from "@/lib/scoring";
 
 const POLL_MS = 15_000;
+const POLL_WAITING_MS = 3_000;
 
 const COUNTDOWN_S = 10;
 
-export default function TeamDashboard({ initialView, initialLeaderboard, initialCountdownAt }) {
+export default function TeamDashboard({ initialView, initialLeaderboard, initialCountdownAt, initialGameEndAt }) {
   const router = useRouter();
   const [view, setView] = useState(initialView);
   const [leaderboard, setLeaderboard] = useState(initialLeaderboard);
   const [countdownAt, setCountdownAt] = useState(initialCountdownAt ?? null);
+  const [gameEndAt, setGameEndAt] = useState(initialGameEndAt ?? null);
   const [now, setNow] = useState(Date.now());
   const [tab, setTab] = useState("quest");
   const [celebrate, setCelebrate] = useState(null);
@@ -34,6 +36,7 @@ export default function TeamDashboard({ initialView, initialLeaderboard, initial
         setView(data.view);
         setLeaderboard(data.leaderboard);
         if (data.countdownAt !== undefined) setCountdownAt(data.countdownAt);
+        if (data.gameEndAt !== undefined) setGameEndAt(data.gameEndAt ?? null);
       }
     } catch {
       /* offline for a moment — the next tick will catch up */
@@ -41,6 +44,7 @@ export default function TeamDashboard({ initialView, initialLeaderboard, initial
   }, []);
 
   useEffect(() => {
+    sync(); // fetch fresh state immediately on mount
     const id = setInterval(sync, POLL_MS);
     return () => clearInterval(id);
   }, [sync]);
@@ -96,10 +100,54 @@ export default function TeamDashboard({ initialView, initialLeaderboard, initial
 
   const { team, current, stamps, allDone, hintsLeft, words, final } = view;
 
+  // Poll faster while waiting for HQ to start so the countdown appears quickly
+  const gameStarted = !!(countdownAt || team.startedAt);
+  useEffect(() => {
+    if (gameStarted) return;
+    const id = setInterval(sync, POLL_WAITING_MS);
+    return () => clearInterval(id);
+  }, [sync, gameStarted]);  // mount sync already handled above
+
   const countdownSec = countdownAt
     ? Math.max(0, COUNTDOWN_S - Math.floor((now - new Date(countdownAt).getTime()) / 1000))
     : null;
   const showCountdown = countdownSec !== null && countdownSec > 0;
+
+  // Waiting for HQ to start — no countdown has fired yet
+  if (!countdownAt) {
+    return (
+      <main className="flex min-h-dvh flex-col items-center justify-center bg-ink text-center px-6">
+        <div className="mb-6 inline-flex h-16 w-16 items-center justify-center rounded-full border-2 border-gold/40">
+          <Timer className="h-7 w-7 text-gold" />
+        </div>
+        <p className="mb-2 font-serif text-2xl text-parchment">{team.name}</p>
+        <p className="mb-1 text-sm text-muted">You are checked in.</p>
+        <p className="text-sm text-muted">Waiting for HQ to start the game&hellip;</p>
+        <p className="mt-8 text-xs text-muted">This screen updates automatically</p>
+        <div className="mt-6 flex gap-4">
+          <button onClick={sync} className="text-xs text-muted underline hover:text-parchment">
+            Refresh
+          </button>
+          <button onClick={logout} className="text-xs text-muted underline hover:text-parchment">
+            Log out
+          </button>
+        </div>
+      </main>
+    );
+  }
+
+  if (gameEndAt) {
+    return (
+      <main className="flex min-h-dvh flex-col items-center justify-center bg-ink text-center px-6">
+        <div className="mb-6 inline-flex h-16 w-16 items-center justify-center rounded-full border-2 border-gold/40">
+          <Timer className="h-7 w-7 text-gold" />
+        </div>
+        <p className="mb-2 font-serif text-2xl text-parchment">{team.name}</p>
+        <p className="text-sm text-muted">Waiting for HQ to start the game&hellip;</p>
+        <p className="mt-8 text-xs text-muted/50">This screen will update automatically</p>
+      </main>
+    );
+  }
 
   if (showCountdown) {
     return (

@@ -47,8 +47,10 @@ export const POST = handler(async (req) => {
     .neq("id", "");
   if (error) return fail(error.message, 500);
 
-  // Also reset countdown so the next run starts clean
-  await sb.from("game_settings").upsert({ key: "countdown_at", value: null });
+  // Reset all game-control timestamps so the next run starts clean
+  const { setSetting } = await import("@/lib/settings");
+  await setSetting("countdown_at", null);
+  await setSetting("game_end_at", null);
 
   return ok({ view: adminViewFrom(await loadGame()) });
 });

@@ -10,7 +10,11 @@ export default async function TeamPage() {
   const teamId = await requireTeam();
   if (!teamId) redirect("/");
 
-  const [game, countdownAt] = await Promise.all([loadGame(), getSetting("countdown_at")]);
+  const [game, countdownAt, gameEndAt] = await Promise.all([
+    loadGame(),
+    getSetting("countdown_at"),
+    getSetting("game_end_at"),
+  ]);
   const view = teamViewFrom(game, teamId);
   if (!view) redirect("/");
 
@@ -19,6 +23,7 @@ export default async function TeamPage() {
       initialView={view}
       initialLeaderboard={leaderboardFrom(game)}
       initialCountdownAt={countdownAt}
+      initialGameEndAt={gameEndAt ?? null}
     />
   );
 }

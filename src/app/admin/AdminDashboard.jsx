@@ -132,6 +132,7 @@ export default function AdminDashboard({ initialView }) {
 function EventControlTab({ settings, setSettings, post, busy }) {
   const [countdown, setCountdown] = useState(null);
   const [cdBusy, setCdBusy] = useState(false);
+  const [endCdBusy, setEndCdBusy] = useState(false);
   const [toast, setToast] = useState("");
 
   if (!settings) {
@@ -166,6 +167,13 @@ function EventControlTab({ settings, setSettings, post, busy }) {
       setSettings((prev) => ({ ...prev, [key]: value === "true" ? "false" : "true" }));
       showToast("No connection — change not saved.");
     }
+  }
+
+  async function startEndCountdown() {
+    setEndCdBusy(true);
+    await fetch("/api/admin/end-countdown", { method: "POST" });
+    setEndCdBusy(false);
+    showToast("End countdown started");
   }
 
   async function startCountdown() {
@@ -222,28 +230,53 @@ function EventControlTab({ settings, setSettings, post, busy }) {
         </div>
       </Panel>
 
-      {/* Synchronized start */}
+      {/* Game control */}
       <Panel>
-        <p className="mb-1 text-xs uppercase tracking-wider text-gold flex items-center gap-1.5">
-          <Rocket className="h-3.5 w-3.5" /> Synchronized start
+        <p className="mb-4 text-xs uppercase tracking-wider text-gold flex items-center gap-1.5">
+          <Rocket className="h-3.5 w-3.5" /> Game control
         </p>
-        <p className="mb-4 text-xs text-muted">
-          Press once all teams are logged in. A 10-second countdown appears on every team's screen simultaneously. All clocks start at zero together.
-        </p>
-        {countdown !== null ? (
-          <div className="rounded-lg border border-gold/40 bg-gold/10 p-4 text-center">
-            <p className="text-xs text-muted mb-1">Countdown sent — teams see:</p>
-            <p className="text-5xl font-bold text-gold">{countdown}</p>
+        <div className="flex flex-col gap-3">
+          {/* Start */}
+          <div className="rounded-lg border border-ink-line p-3">
+            <p className="mb-0.5 text-sm font-semibold text-parchment">Start game</p>
+            <p className="mb-3 text-xs text-muted">Triggers a 10-second countdown on every team screen simultaneously. Press once all teams are logged in and waiting.</p>
+            {countdown !== null ? (
+              <div className="rounded-lg border border-gold/40 bg-gold/10 p-3 text-center">
+                <p className="text-xs text-muted mb-1">Countdown in progress — teams see:</p>
+                <p className="text-4xl font-bold text-gold">{countdown}</p>
+              </div>
+            ) : (
+              <button
+                onClick={startCountdown}
+                disabled={cdBusy}
+                className="w-full rounded-lg border border-gold bg-gold/10 py-2.5 text-sm font-semibold text-gold hover:bg-gold/20 disabled:opacity-50 transition"
+              >
+                {cdBusy ? "Sending…" : "🚀 Start Game"}
+              </button>
+            )}
           </div>
-        ) : (
-          <button
-            onClick={startCountdown}
-            disabled={cdBusy}
-            className="w-full rounded-lg border border-gold bg-gold/10 py-3 text-sm font-semibold text-gold hover:bg-gold/20 disabled:opacity-50 transition"
-          >
-            {cdBusy ? "Sending…" : "🚀 Start 10-second countdown"}
-          </button>
-        )}
+
+          {/* End */}
+          <div className="rounded-lg border border-ink-line p-3">
+            <p className="mb-0.5 text-sm font-semibold text-parchment">End game</p>
+            <p className="mb-3 text-xs text-muted">Triggers a 10-second countdown on all team screens, then shows the game-over screen. Use when the event is over.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={startEndCountdown}
+                disabled={endCdBusy}
+                className="flex-1 rounded-lg border border-rust bg-rust/10 py-2.5 text-sm font-semibold text-rust hover:bg-rust/20 disabled:opacity-50 transition"
+              >
+                {endCdBusy ? "Sending…" : "🏁 End Game"}
+              </button>
+              <button
+                onClick={() => setSetting("game_end_at", null, "End countdown cancelled")}
+                className="rounded-lg border border-ink-line px-3 py-2.5 text-xs text-muted hover:text-parchment transition"
+              >
+                Undo
+              </button>
+            </div>
+          </div>
+        </div>
       </Panel>
 
       {/* Live leaderboard link */}

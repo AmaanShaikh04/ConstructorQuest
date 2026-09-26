@@ -5,10 +5,13 @@ import { useEffect, useState, useRef } from "react";
 const POLL_MS = 5_000;
 const COUNTDOWN_S = 10;
 
-function elapsed(startedAt, finishedAt, now) {
+function elapsed(startedAt, finishedAt, now, gameEndAt) {
   if (!startedAt) return null;
-  const end = finishedAt ? new Date(finishedAt).getTime() : now;
-  return end - new Date(startedAt).getTime();
+  const gameEndMs = gameEndAt ? new Date(gameEndAt).getTime() : Infinity;
+  const endMs = finishedAt
+    ? Math.min(new Date(finishedAt).getTime(), gameEndMs)
+    : Math.min(now, gameEndMs);
+  return endMs - new Date(startedAt).getTime();
 }
 
 function fmt(ms) {
@@ -24,6 +27,7 @@ function fmt(ms) {
 export default function LiveLeaderboard() {
   const [rows, setRows] = useState([]);
   const [countdownAt, setCountdownAt] = useState(null);
+  const [gameEndAt, setGameEndAt] = useState(null);
   const [now, setNow] = useState(Date.now());
   const timerRef = useRef(null);
 
@@ -34,6 +38,7 @@ export default function LiveLeaderboard() {
       if (data.ok) {
         setRows(data.rows);
         setCountdownAt(data.countdownAt ?? null);
+        setGameEndAt(data.gameEndAt ?? null);
       }
     } catch { /* offline */ }
   }
@@ -125,7 +130,7 @@ export default function LiveLeaderboard() {
           </div>
 
           {rows.map((row) => {
-            const ms = elapsed(row.startedAt, row.finishedAt, now);
+            const ms = elapsed(row.startedAt, row.finishedAt, now, gameEndAt);
             const isFinished = row.finished;
             return (
               <div
