@@ -1,5 +1,6 @@
 import { db } from "@/lib/supabase";
 import { createSessionToken, SESSION_COOKIE, sessionCookieOptions } from "@/lib/session";
+import { getSetting } from "@/lib/settings";
 import { ok, fail, handler, body, throttle, clientKey } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,9 @@ export const POST = handler(async (req) => {
   }
 
   /* ---- Team ---- */
+  const teamLoginEnabled = await getSetting("team_login_enabled", "true");
+  if (teamLoginEnabled === "false") return fail("Team login is currently closed. Check with HQ.", 403);
+
   if (!teamId) return fail("Choose your college.");
 
   const sb = db();

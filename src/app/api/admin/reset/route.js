@@ -20,6 +20,8 @@ export const POST = handler(async (req) => {
   }
 
   const sb = db();
+
+  // Tables with integer PKs
   for (const table of [
     "penalties",
     "final_submissions",
@@ -31,11 +33,22 @@ export const POST = handler(async (req) => {
     if (error) return fail(`Could not clear ${table}: ${error.message}`, 500);
   }
 
+  // guest_progress has a bigint PK
+  { const { error } = await sb.from("guest_progress").delete().neq("id", -1);
+    if (error) return fail(`Could not clear guest_progress: ${error.message}`, 500); }
+
+  // guests has a uuid PK
+  { const { error } = await sb.from("guests").delete().neq("id", "00000000-0000-0000-0000-000000000000");
+    if (error) return fail(`Could not clear guests: ${error.message}`, 500); }
+
   const { error } = await sb
     .from("teams")
     .update({ team_spirit: 0, speed_rank: null, started_at: null })
     .neq("id", "");
   if (error) return fail(error.message, 500);
+
+  // Also reset countdown so the next run starts clean
+  await sb.from("game_settings").upsert({ key: "countdown_at", value: null });
 
   return ok({ view: adminViewFrom(await loadGame()) });
 });

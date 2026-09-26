@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { ShieldAlert, Printer, RotateCcw, Check, X, Trash2, Eye, EyeOff, Timer } from "lucide-react";
+import { ShieldAlert, Printer, RotateCcw, Check, X, Trash2, Eye, EyeOff, Timer, Radio, Users, UserX, Rocket, ExternalLink } from "lucide-react";
 import { GoldButton, GhostButton, Panel, Tabs } from "@/components/ui";
 import Leaderboard from "@/components/Leaderboard";
 import { formatElapsed } from "@/lib/format";
@@ -14,7 +14,8 @@ const POLL_MS = 10_000;
 export default function AdminDashboard({ initialView }) {
   const router = useRouter();
   const [view, setView] = useState(initialView);
-  const [tab, setTab] = useState("teams");
+  const [tab, setTab] = useState("control");
+  const [settings, setSettings] = useState(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState("");
 
@@ -29,6 +30,13 @@ export default function AdminDashboard({ initialView }) {
   }, []);
 
   useEffect(() => {
+    // Fetch settings once on mount — EventControlTab reads from this state
+    fetch("/api/admin/settings", { cache: "no-store" })
+      .then((r) => r.json())
+      .then((d) => { if (d.ok) setSettings(d.settings); })
+      .catch(() => {});
+
+    sync();
     const id = setInterval(sync, POLL_MS);
     return () => clearInterval(id);
   }, [sync]);
@@ -83,6 +91,7 @@ export default function AdminDashboard({ initialView }) {
 
         <Tabs
           tabs={[
+            ["control", "Event control"],
             ["teams", "Teams"],
             ["bonus", "Bonus review", pendingBonuses.length || null],
             ["final", "Final challenge", pendingFinals.length || null],
@@ -102,6 +111,7 @@ export default function AdminDashboard({ initialView }) {
           </p>
         )}
 
+        {tab === "control" && <EventControlTab settings={settings} setSettings={setSettings} post={post} busy={busy} />}
         {tab === "teams" && <TeamsTab view={view} post={post} busy={busy} />}
         {tab === "bonus" && <BonusTab items={pendingBonuses} view={view} post={post} busy={busy} />}
         {tab === "final" && <FinalTab view={view} post={post} busy={busy} />}
@@ -112,6 +122,148 @@ export default function AdminDashboard({ initialView }) {
         {tab === "danger" && <ResetTab post={post} busy={busy} />}
       </div>
     </main>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Event control                                                              */
+/* -------------------------------------------------------------------------- */
+
+function EventControlTab({ settings, setSettings, post, busy }) {
+  const [countdown, setCountdown] = useState(null);
+  const [cdBusy, setCdBusy] = useState(false);
+  const [toast, setToast] = useState("");
+
+  if (!settings) {
+    return <Panel><p className="text-sm text-muted">Loading…</p></Panel>;
+  }
+
+  const teamLoginOn = settings.team_login_enabled !== "false";
+  const guestLoginOn = settings.guest_login_enabled === "true";
+  const liveVisible = settings.live_leaderboard_visible === "true";
+
+  function showToast(msg) {
+    setToast(msg);
+    setTimeout(() => setToast(""), 3000);
+  }
+
+  async function setSetting(key, value, label) {
+    setSettings((prev) => ({ ...prev, [key]: value }));
+    try {
+      const res = await fetch("/api/admin/settings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ key, value }),
+      });
+      const data = await res.json();
+      if (data.ok) {
+        showToast(label);
+      } else {
+        setSettings((prev) => ({ ...prev, [key]: value === "true" ? "false" : "true" }));
+        showToast("Save failed: " + (data.error ?? "unknown error"));
+      }
+    } catch {
+      setSettings((prev) => ({ ...prev, [key]: value === "true" ? "false" : "true" }));
+      showToast("No connection — change not saved.");
+    }
+  }
+
+  async function startCountdown() {
+    setCdBusy(true);
+    const res = await fetch("/api/admin/countdown", { method: "POST" });
+    const data = await res.json();
+    if (data.ok) {
+      let s = 10;
+      setCountdown(s);
+      const id = setInterval(() => {
+        s -= 1;
+        setCountdown(s);
+        if (s <= 0) clearInterval(id);
+      }, 1000);
+    }
+    setCdBusy(false);
+  }
+
+  return (
+    <div className="flex flex-col gap-4">
+
+      {/* Toast confirmation */}
+      {toast && (
+        <div className="rounded-lg border border-forest bg-forest/15 px-4 py-2.5 text-sm font-medium text-forest">
+          ✓ {toast}
+        </div>
+      )}
+
+      {/* Login gates */}
+      <Panel>
+        <p className="mb-4 text-xs uppercase tracking-wider text-gold">Login gates</p>
+        <div className="flex flex-col gap-3">
+          <GateRow
+            icon={<Users className="h-4 w-4" />}
+            label="Team login"
+            on={teamLoginOn}
+            onEnable={() => setSetting("team_login_enabled", "true", "Team login enabled")}
+            onDisable={() => setSetting("team_login_enabled", "false", "Team login disabled")}
+          />
+          <GateRow
+            icon={<UserX className="h-4 w-4" />}
+            label="Guest login"
+            on={guestLoginOn}
+            onEnable={() => setSetting("guest_login_enabled", "true", "Guest login enabled")}
+            onDisable={() => setSetting("guest_login_enabled", "false", "Guest login disabled")}
+          />
+          <GateRow
+            icon={<Radio className="h-4 w-4" />}
+            label="Live leaderboard button"
+            on={liveVisible}
+            onEnable={() => setSetting("live_leaderboard_visible", "true", "Leaderboard button shown")}
+            onDisable={() => setSetting("live_leaderboard_visible", "false", "Leaderboard button hidden")}
+          />
+        </div>
+      </Panel>
+
+      {/* Synchronized start */}
+      <Panel>
+        <p className="mb-1 text-xs uppercase tracking-wider text-gold flex items-center gap-1.5">
+          <Rocket className="h-3.5 w-3.5" /> Synchronized start
+        </p>
+        <p className="mb-4 text-xs text-muted">
+          Press once all teams are logged in. A 10-second countdown appears on every team's screen simultaneously. All clocks start at zero together.
+        </p>
+        {countdown !== null ? (
+          <div className="rounded-lg border border-gold/40 bg-gold/10 p-4 text-center">
+            <p className="text-xs text-muted mb-1">Countdown sent — teams see:</p>
+            <p className="text-5xl font-bold text-gold">{countdown}</p>
+          </div>
+        ) : (
+          <button
+            onClick={startCountdown}
+            disabled={cdBusy}
+            className="w-full rounded-lg border border-gold bg-gold/10 py-3 text-sm font-semibold text-gold hover:bg-gold/20 disabled:opacity-50 transition"
+          >
+            {cdBusy ? "Sending…" : "🚀 Start 10-second countdown"}
+          </button>
+        )}
+      </Panel>
+
+      {/* Live leaderboard link */}
+      <Panel>
+        <p className="mb-2 text-xs uppercase tracking-wider text-gold flex items-center gap-1.5">
+          <Radio className="h-3.5 w-3.5" /> Live leaderboard
+        </p>
+        <p className="mb-3 text-xs text-muted">
+          Project this on the big screen — no login needed, updates every 5 seconds.
+        </p>
+        <a
+          href="/live"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex items-center gap-2 rounded-md border border-gold/40 px-3 py-2 text-sm text-gold hover:bg-gold/10 transition w-fit"
+        >
+          <ExternalLink className="h-4 w-4" /> Open live leaderboard ↗
+        </a>
+      </Panel>
+    </div>
   );
 }
 
@@ -210,48 +362,60 @@ function BonusTab({ items, view, post, busy }) {
 
       {items.map(({ team, bonus }) => (
         <Panel key={`${team.id}-${bonus.checkpointId}`}>
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <div className="min-w-[60%]">
-              <p className="text-sm font-semibold text-parchment">
-                {team.name} · {bonus.name}
-              </p>
-              <p className="text-xs text-muted">{bonus.challenge}</p>
-              <p className="mt-1 text-[11px] text-[#8790a8]">
-                Claimed {new Date(bonus.submittedAt).toLocaleTimeString()}
-              </p>
-            </div>
-            <div className="flex gap-2">
-              <GoldButton
-                className="px-3 py-1.5 text-xs"
-                disabled={busy.startsWith("bonus")}
-                onClick={() =>
-                  post(
-                    "/api/admin/bonus-approve",
-                    { teamId: team.id, checkpointId: bonus.checkpointId, status: "approved" },
-                    `bonus-${team.id}`
-                  )
-                }
-              >
-                <span className="flex items-center gap-1">
-                  <Check className="h-3.5 w-3.5" /> Approve +5
-                </span>
-              </GoldButton>
-              <button
-                disabled={busy.startsWith("bonus")}
-                onClick={() =>
-                  post(
-                    "/api/admin/bonus-approve",
-                    { teamId: team.id, checkpointId: bonus.checkpointId, status: "rejected" },
-                    `bonus-${team.id}`
-                  )
-                }
-                className="rounded-md border border-rust px-3 py-1.5 text-xs text-rust disabled:opacity-50"
-              >
-                <span className="flex items-center gap-1">
-                  <X className="h-3.5 w-3.5" /> Reject
-                </span>
-              </button>
-            </div>
+          <p className="mb-0.5 text-sm font-semibold text-parchment">
+            {team.name} · {bonus.name}
+          </p>
+          <p className="text-xs text-muted">{bonus.challenge}</p>
+          <p className="mb-3 mt-1 text-[11px] text-[#8790a8]">
+            Submitted {new Date(bonus.submittedAt).toLocaleTimeString()}
+          </p>
+
+          {bonus.photoUrl && (
+            <a href={bonus.photoUrl} target="_blank" rel="noopener noreferrer" className="mb-3 block">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={bonus.photoUrl}
+                alt="Bonus photo"
+                className="max-h-64 w-full rounded-md object-contain bg-black/20"
+              />
+              <p className="mt-1 text-[11px] text-muted underline">Open full size ↗</p>
+            </a>
+          )}
+          {!bonus.photoUrl && (
+            <p className="mb-3 text-[11px] italic text-muted">No photo submitted.</p>
+          )}
+
+          <div className="flex gap-2">
+            <GoldButton
+              className="px-3 py-1.5 text-xs"
+              disabled={busy.startsWith("bonus")}
+              onClick={() =>
+                post(
+                  "/api/admin/bonus-approve",
+                  { teamId: team.id, checkpointId: bonus.checkpointId, status: "approved" },
+                  `bonus-${team.id}`
+                )
+              }
+            >
+              <span className="flex items-center gap-1">
+                <Check className="h-3.5 w-3.5" /> Approve +5
+              </span>
+            </GoldButton>
+            <button
+              disabled={busy.startsWith("bonus")}
+              onClick={() =>
+                post(
+                  "/api/admin/bonus-approve",
+                  { teamId: team.id, checkpointId: bonus.checkpointId, status: "rejected" },
+                  `bonus-${team.id}`
+                )
+              }
+              className="rounded-md border border-rust px-3 py-1.5 text-xs text-rust disabled:opacity-50"
+            >
+              <span className="flex items-center gap-1">
+                <X className="h-3.5 w-3.5" /> Reject
+              </span>
+            </button>
           </div>
         </Panel>
       ))}
@@ -694,6 +858,43 @@ function ResetTab({ post, busy }) {
       </div>
       {done && <p className="mt-3 text-xs text-forest">Progress cleared. The game is back to zero.</p>}
     </Panel>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* Gate row — explicit Open / Close buttons                                  */
+/* -------------------------------------------------------------------------- */
+
+function GateRow({ icon, label, on, onEnable, onDisable }) {
+  return (
+    <div className="flex items-center justify-between rounded-lg border border-ink-line p-3">
+      <div>
+        <p className="flex items-center gap-2 text-sm font-semibold text-parchment">
+          {icon} {label}
+        </p>
+        <p className={"mt-0.5 text-xs font-medium " + (on ? "text-forest" : "text-rust")}>
+          {on ? "● Open" : "● Closed"}
+        </p>
+      </div>
+      <div className="flex gap-2">
+        <button
+          type="button"
+          onClick={onEnable}
+          disabled={on}
+          className="rounded-md border border-forest px-3 py-1.5 text-xs font-medium text-forest disabled:opacity-30 hover:bg-forest/10 transition"
+        >
+          Open
+        </button>
+        <button
+          type="button"
+          onClick={onDisable}
+          disabled={!on}
+          className="rounded-md border border-rust px-3 py-1.5 text-xs font-medium text-rust disabled:opacity-30 hover:bg-rust/10 transition"
+        >
+          Close
+        </button>
+      </div>
+    </div>
   );
 }
 

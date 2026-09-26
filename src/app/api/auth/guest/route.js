@@ -2,6 +2,7 @@ import { db } from "@/lib/supabase";
 import { createSessionToken, SESSION_COOKIE, sessionCookieOptions } from "@/lib/session";
 import { validateEmail } from "@/lib/guest-email";
 import { generateGuestName } from "@/lib/guest-names";
+import { getSetting } from "@/lib/settings";
 import { ok, fail, handler, body, throttle, clientKey, isMissingTable } from "@/lib/api";
 
 export const dynamic = "force-dynamic";
@@ -20,6 +21,9 @@ export const POST = handler(async (req) => {
   if (!throttle(clientKey(req))) {
     return fail("Too many attempts. Wait a minute and try again.", 429);
   }
+
+  const guestLoginEnabled = await getSetting("guest_login_enabled", "false");
+  if (guestLoginEnabled === "false") return fail("Guest login is not open yet. Check back later.", 403);
 
   const email = validateEmail((await body(req)).email);
   if (!email.ok) return fail(email.error);

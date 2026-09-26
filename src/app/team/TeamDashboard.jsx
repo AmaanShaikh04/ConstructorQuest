@@ -1,8 +1,8 @@
-"use client";
+﻿"use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { Sparkles, Trophy, Lightbulb, Clock, PartyPopper } from "lucide-react";
+import { Sparkles, Trophy, Lightbulb, Clock, PartyPopper, ChevronDown, ChevronUp, Camera, X as XIcon, Timer } from "lucide-react";
 import { GoldButton, Panel, Parchment, Stamp, Tabs } from "@/components/ui";
 import QrScanner from "@/components/QrScanner";
 import Leaderboard from "@/components/Leaderboard";
@@ -10,10 +10,14 @@ import { MAX_HINTS, HINT_COST } from "@/lib/scoring";
 
 const POLL_MS = 15_000;
 
-export default function TeamDashboard({ initialView, initialLeaderboard }) {
+const COUNTDOWN_S = 10;
+
+export default function TeamDashboard({ initialView, initialLeaderboard, initialCountdownAt }) {
   const router = useRouter();
   const [view, setView] = useState(initialView);
   const [leaderboard, setLeaderboard] = useState(initialLeaderboard);
+  const [countdownAt, setCountdownAt] = useState(initialCountdownAt ?? null);
+  const [now, setNow] = useState(Date.now());
   const [tab, setTab] = useState("quest");
   const [celebrate, setCelebrate] = useState(null);
   const [busy, setBusy] = useState("");
@@ -29,6 +33,7 @@ export default function TeamDashboard({ initialView, initialLeaderboard }) {
       if (data.ok) {
         setView(data.view);
         setLeaderboard(data.leaderboard);
+        if (data.countdownAt !== undefined) setCountdownAt(data.countdownAt);
       }
     } catch {
       /* offline for a moment — the next tick will catch up */
@@ -39,6 +44,12 @@ export default function TeamDashboard({ initialView, initialLeaderboard }) {
     const id = setInterval(sync, POLL_MS);
     return () => clearInterval(id);
   }, [sync]);
+
+  // Tick every second for the countdown display
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
 
   // `quiet` hands the error back to the caller instead of showing it at the top
   // of the page — the scanner renders its own message next to the code.
@@ -84,6 +95,24 @@ export default function TeamDashboard({ initialView, initialLeaderboard }) {
   }
 
   const { team, current, stamps, allDone, hintsLeft, words, final } = view;
+
+  const countdownSec = countdownAt
+    ? Math.max(0, COUNTDOWN_S - Math.floor((now - new Date(countdownAt).getTime()) / 1000))
+    : null;
+  const showCountdown = countdownSec !== null && countdownSec > 0;
+
+  if (showCountdown) {
+    return (
+      <main className="flex min-h-dvh flex-col items-center justify-center bg-ink text-center px-6">
+        <p className="text-xs uppercase tracking-widest text-muted mb-4">Get ready!</p>
+        <p className="font-serif text-2xl text-parchment mb-6">{team.name}</p>
+        <div className="text-[120px] font-bold leading-none text-gold" style={{ textShadow: "0 0 40px rgba(212,175,55,0.4)" }}>
+          {countdownSec}
+        </div>
+        <p className="mt-6 text-sm text-muted">The quest begins when the timer hits zero</p>
+      </main>
+    );
+  }
 
   return (
     <main className="min-h-dvh bg-ink">
@@ -139,7 +168,7 @@ export default function TeamDashboard({ initialView, initialLeaderboard }) {
                   Checkpoint {current.position} of {view.totalCheckpoints}
                 </p>
                 <blockquote className="mb-4 font-serif text-lg leading-snug">
-                  “{current.riddle}”
+                  &ldquo;{current.riddle}&rdquo;
                 </blockquote>
 
                 <HintBlock
@@ -149,27 +178,11 @@ export default function TeamDashboard({ initialView, initialLeaderboard }) {
                   onUse={() => post("/api/team/hint", {}, "hint")}
                 />
 
-                <div className="mb-4 rounded-md bg-parchment-dim p-3">
-                  <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold text-forest">
-                    <Sparkles className="h-3.5 w-3.5" /> Bonus challenge (+5)
-                  </p>
-                  <p className="mb-2 text-sm">{current.bonus}</p>
-                  {current.bonusStatus === "approved" ? (
-                    <p className="text-xs font-medium text-forest">Approved by HQ. +5 awarded.</p>
-                  ) : current.bonusStatus === "rejected" ? (
-                    <p className="text-xs text-rust">HQ didn&apos;t approve this one.</p>
-                  ) : current.bonusStatus === "pending" ? (
-                    <p className="text-xs text-forest">Submitted — waiting on HQ to approve.</p>
-                  ) : (
-                    <button
-                      onClick={() => post("/api/team/bonus", {}, "bonus")}
-                      disabled={busy === "bonus"}
-                      className="rounded-md border border-forest px-2.5 py-1.5 text-xs font-medium text-forest disabled:opacity-50"
-                    >
-                      {busy === "bonus" ? "Sending…" : "We did it"}
-                    </button>
-                  )}
-                </div>
+                <BonusBlock
+                  current={current}
+                  busy={busy}
+                  onSubmit={(photoUrl) => post("/api/team/bonus", { photoUrl }, "bonus")}
+                />
 
                 <p className="mb-2 text-xs uppercase tracking-wider text-ink-soft">
                   At the checkpoint, scan the volunteer&apos;s QR
@@ -213,11 +226,150 @@ function StampRow({ stamps, completed, score }) {
         {stamps.map((s) => (
           <div key={s.id} className="flex w-[44px] flex-col items-center gap-1">
             <Stamp filled={!!s.completedAt} current={s.isCurrent} />
-            <span className="text-center text-[10px] leading-tight text-muted">{s.name}</span>
           </div>
         ))}
       </div>
     </Panel>
+  );
+}
+
+function BonusBlock({ current, busy, onSubmit }) {
+  const [open, setOpen] = useState(false);
+  const [photo, setPhoto] = useState(null);   // { file, previewUrl }
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState("");
+  const fileRef = useRef(null);
+
+  function pickPhoto(e) {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setPhoto({ file, previewUrl: URL.createObjectURL(file) });
+    setUploadError("");
+  }
+
+  function clearPhoto() {
+    if (photo) URL.revokeObjectURL(photo.previewUrl);
+    setPhoto(null);
+    if (fileRef.current) fileRef.current.value = "";
+  }
+
+  async function handleSubmit() {
+    setUploadError("");
+    let photoUrl = null;
+
+    if (photo) {
+      setUploading(true);
+      const form = new FormData();
+      form.append("photo", photo.file);
+      try {
+        const res = await fetch("/api/team/bonus-photo", { method: "POST", body: form });
+        const data = await res.json();
+        if (!data.ok) { setUploadError(data.error || "Upload failed."); setUploading(false); return; }
+        photoUrl = data.url;
+      } catch {
+        setUploadError("Upload failed — check your connection.");
+        setUploading(false);
+        return;
+      }
+      setUploading(false);
+    }
+
+    await onSubmit(photoUrl);
+  }
+
+  const isBusy = busy === "bonus" || uploading;
+
+  return (
+    <div className="mb-4 rounded-md bg-parchment-dim overflow-hidden">
+      {/* Header — always visible, click to expand */}
+      <button
+        className="flex w-full items-center justify-between p-3 text-left"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <p className="flex items-center gap-1.5 text-xs font-semibold text-forest">
+          <Sparkles className="h-3.5 w-3.5" /> Bonus challenge (+5)
+        </p>
+        {current.bonusStatus === "approved" ? (
+          <span className="text-xs font-medium text-forest">+5 approved ✓</span>
+        ) : current.bonusStatus === "rejected" ? (
+          <span className="text-xs text-rust">Rejected</span>
+        ) : current.bonusStatus === "pending" ? (
+          <span className="text-xs text-forest">Pending HQ…</span>
+        ) : open ? (
+          <ChevronUp className="h-4 w-4 text-forest" />
+        ) : (
+          <ChevronDown className="h-4 w-4 text-forest" />
+        )}
+      </button>
+
+      {/* Expandable body */}
+      {open && (
+        <div className="border-t border-parchment/20 p-3 pt-2">
+          <p className="mb-3 text-sm">{current.bonus}</p>
+
+          {current.bonusStatus === "approved" && (
+            <p className="text-xs font-medium text-forest">Approved by HQ. +5 awarded.</p>
+          )}
+          {current.bonusStatus === "rejected" && (
+            <p className="text-xs text-rust">HQ didn&apos;t approve this one.</p>
+          )}
+          {current.bonusStatus === "pending" && (
+            <p className="text-xs text-forest">Submitted — waiting on HQ to approve.</p>
+          )}
+
+          {!current.bonusStatus && (
+            <>
+              {/* Photo picker */}
+              <div className="mb-3">
+                {photo ? (
+                  <div className="relative inline-block">
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                    <img
+                      src={photo.previewUrl}
+                      alt="Bonus photo preview"
+                      className="max-h-48 rounded-md object-cover"
+                    />
+                    <button
+                      onClick={clearPhoto}
+                      className="absolute right-1 top-1 rounded-full bg-black/60 p-0.5 text-white"
+                    >
+                      <XIcon className="h-3.5 w-3.5" />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => fileRef.current?.click()}
+                    className="flex items-center gap-2 rounded-md border border-dashed border-forest/60 px-3 py-2 text-xs text-forest"
+                  >
+                    <Camera className="h-4 w-4" /> Attach a photo (optional)
+                  </button>
+                )}
+                <input
+                  ref={fileRef}
+                  type="file"
+                  accept="image/*"
+                  capture="environment"
+                  className="hidden"
+                  onChange={pickPhoto}
+                />
+              </div>
+
+              {uploadError && (
+                <p className="mb-2 text-xs text-rust">{uploadError}</p>
+              )}
+
+              <button
+                onClick={handleSubmit}
+                disabled={isBusy}
+                className="rounded-md border border-forest px-2.5 py-1.5 text-xs font-medium text-forest disabled:opacity-50"
+              >
+                {uploading ? "Uploading…" : busy === "bonus" ? "Sending…" : "We did it — submit"}
+              </button>
+            </>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -263,13 +415,8 @@ function FinalChallenge({ words, final, finalText, setFinalText, busy, onSubmit 
         ))}
       </div>
 
-      {(!final || final.status === "rejected") && (
+      {!final && (
         <>
-          {final?.status === "rejected" && (
-            <p className="mb-3 text-xs text-rust">
-              HQ says that isn&apos;t it. Have another go — “{final.answer}” didn&apos;t land.
-            </p>
-          )}
           <label htmlFor="final" className="mb-1 block text-xs uppercase tracking-wider text-ink-soft">
             Arrange them into your final answer
           </label>
@@ -287,8 +434,18 @@ function FinalChallenge({ words, final, finalText, setFinalText, busy, onSubmit 
       )}
 
       {final?.status === "pending" && (
-        <p className="text-sm text-forest">
-          Submitted: “{final.answer}” — waiting on HQ to confirm.
+        <div>
+          <p className="mb-1 text-sm text-forest">
+            Submitted: &ldquo;{final.answer}&rdquo;
+          </p>
+          <p className="mt-2 text-sm text-forest">
+            Please make your way to the <span className="font-medium text-forest">SCC</span> and wait there. HQ will process and confirm your answer shortly.
+          </p>
+        </div>
+      )}
+      {final?.status === "rejected" && (
+        <p className="text-sm text-rust">
+          Your answer &ldquo;{final.answer}&rdquo; was not accepted. Please speak to HQ at the SCC.
         </p>
       )}
       {final?.status === "approved" && (

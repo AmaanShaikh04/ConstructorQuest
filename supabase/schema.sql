@@ -15,6 +15,7 @@ drop table if exists hints_used cascade;
 drop table if exists team_progress cascade;
 drop table if exists checkpoints cascade;
 drop table if exists teams cascade;
+drop table if exists game_settings cascade;
 
 create table teams (
   id          text primary key,
@@ -37,6 +38,7 @@ create table checkpoints (
   bonus_challenge text not null,
   word            text not null,
   qr_code         text not null unique,
+  spot            text,
   sort_order      int  not null default 0
 );
 
@@ -64,6 +66,7 @@ create table bonus_submissions (
                  check (status in ('pending', 'approved', 'rejected')),
   submitted_at timestamptz not null default now(),
   approved_at  timestamptz,
+  photo_url    text,
   unique (team_id, checkpoint_id)
 );
 
@@ -120,6 +123,17 @@ create table guest_progress (
 create index on guest_progress (guest_id);
 create index on guests (finished_at);
 
+create table game_settings (
+  key   text primary key,
+  value text
+);
+
+insert into game_settings (key, value) values
+  ('team_login_enabled',       'true'),
+  ('guest_login_enabled',      'false'),
+  ('live_leaderboard_visible', 'false'),
+  ('countdown_at',              null);
+
 create index on team_progress (team_id);
 create index on hints_used (team_id);
 create index on bonus_submissions (team_id);
@@ -162,45 +176,45 @@ create policy "public read" on penalties         for select using (true);
 insert into checkpoints (id, name, full_name, riddle, hint, bonus_challenge, word, qr_code, sort_order) values
 ('irc', 'IRC', 'Information Resource Center (Library)',
  'I am filled with voices that have never spoken, and I punish anyone who does. Take a piece of me away and I will count every single day until it comes back.',
- 'Silence is the rule, and everything here is borrowed.',
+ 'Look for us at the Coffee Bar inside the library.',
  'Pretend everyone in your team is studying for finals.',
- 'Learn', 'CQ-IRC-26', 1),
+ 'It', 'CQ-X7K2M4P9', 1),
 
 ('green', 'Campus Green', 'The diamond-shaped lawn at the heart of campus',
  'I have four corners and not one wall. Every path here is a polite detour around my middle, and the shortest way across campus is straight through me.',
- 'The diamond of grass that everyone crosses and nobody owns.',
+ 'Find us near the Interfaith House on the green.',
  'Form a human diamond shape with your whole team.',
- 'Belong', 'CQ-GRN-26', 2),
+ 'always', 'CQ-Q3R8T5W1', 2),
 
 ('nord', 'Nord Canteen', 'Nordmetall Canteen',
  'Three times a day I say the same thing, and it is always a queue. You arrive with a plan and leave with whatever was left. Everyone complains about me; everyone comes back tomorrow.',
- 'Trays, queues, and an opinion from everyone who eats here.',
+ 'We are at the Canteen Door — stand right at the entrance.',
  'Recreate a food advertisement as a team.',
- 'Share', 'CQ-NRD-26', 3),
+ 'seems', 'CQ-B6N1Y4H7', 3),
 
 ('scc', 'SCC', 'Sports & Convention Center',
  'I am measured in laps, in points, and in excuses. My floor squeaks under everyone who walks in certain they will win. Come to beat someone and you will leave tired either way.',
- 'Where the floor squeaks and the scoreboard argues back.',
+ 'Meet us at the Recreation Center Entrance.',
  'Do 20 synchronized jumping jacks.',
- 'Compete', 'CQ-SCC-26', 4),
+ 'impossible', 'CQ-F2J9L6D3', 4),
 
 ('sac', 'SAC', 'Student Activity Center',
  'My walls wear paper like armour, and every sheet of it is asking you to join something. I am where “we should start a club” stops being a joke and becomes a Tuesday evening.',
- 'Every wall is a noticeboard, and every noticeboard wants your name.',
+ 'Head to Hall 3, where the welcome party was just held yesterday.',
  'Name 3 student clubs, out loud, as a team.',
- 'Connect', 'CQ-SAC-26', 5),
+ 'until', 'CQ-C5V8Z2G4', 5),
 
 ('tos', 'TOS', 'The Other Side',
  'I sleep through the week and wake the moment it surrenders. My best stories are the ones nobody can reconstruct in the morning. My name is simply where you go when you have had enough of everywhere else.',
- 'Late, loud, and named for not being here.',
+ 'We are at the Entrance Door — you will know it when you see it.',
  'Strike a team dance pose for the camera.',
- 'Celebrate', 'CQ-TOS-26', 6),
+ 'it''s', 'CQ-M1A7E3S6', 6),
 
 ('rlh', 'RLH', 'Reimar Lüst Hall',
  'Hundreds enter me in silence and leave arguing about question four. I seat far more people than I ever comfort. I am named for a man who spent his life looking up; you will spend two hours looking at my ceiling.',
- 'The big lecture hall named after an astrophysicist — where exams happen.',
+ 'Find us at Student Services, just inside the building.',
  'Take a “survived the exam” group photo.',
- 'Think', 'CQ-RLH-26', 7);
+ 'done', 'CQ-U9W4K8P2', 7);
 
 -- ---------------------------------------------------------------------------
 -- Seed data — 5 teams, each with its own route through the same 7 checkpoints
@@ -209,13 +223,13 @@ insert into checkpoints (id, name, full_name, riddle, hint, bonus_challenge, wor
 -- ---------------------------------------------------------------------------
 
 insert into teams (id, name, short_name, pin, route, sort_order) values
-('merc',        'Mercator College',    'Merc',       '1234',
+('merc',        'Mercator College',    'Merc',        'mk7x2p',
  '["irc","scc","rlh","sac","green","nord","tos"]', 1),
-('krupp',       'Krupp College',       'Krupp',      '2345',
+('krupp',       'Krupp College',       'Krupp',       'kw9r4q',
  '["scc","rlh","nord","tos","irc","sac","green"]', 2),
-('nordcollege', 'Nordmetall College',  'Nord',       '3456',
+('nordcollege', 'Nordmetall College',  'Nord',        'nq5t8w',
  '["green","irc","sac","scc","tos","rlh","nord"]', 3),
-('c3',          'College 3',           'C3',         '4567',
+('c3',          'College 3',           'C3',          'c3r16v',
  '["nord","green","rlh","irc","scc","tos","sac"]', 4),
-('offcampus',   'Off-Campus Students', 'Off-Campus', '5678',
+('offcampus',   'Off Campus United',   'Off Campus',  'oc8l3m',
  '["tos","sac","green","nord","irc","scc","rlh"]', 5);

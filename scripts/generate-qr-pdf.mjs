@@ -1,31 +1,36 @@
+/**
+ * Generates qr-posters.pdf in the project root.
+ * Run: node scripts/generate-qr-pdf.mjs
+ */
+
 import QRCode from "qrcode";
 import sharp from "sharp";
-import { db } from "@/lib/supabase";
-import { requireAdmin } from "@/lib/session";
-import { fail, handler } from "@/lib/api";
+import PDFDocument from "pdfkit";
+import fs from "fs";
+import path from "path";
+import { fileURLToPath } from "url";
 
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const ROOT = path.join(__dirname, "..");
+
+const CHECKPOINTS = [
+  { id: "irc",   name: "IRC",          qrCode: "CQ-X7K2M4P9" },
+  { id: "green", name: "Campus Green", qrCode: "CQ-Q3R8T5W1" },
+  { id: "nord",  name: "Nord Canteen", qrCode: "CQ-B6N1Y4H7" },
+  { id: "scc",   name: "SCC",          qrCode: "CQ-F2J9L6D3" },
+  { id: "sac",   name: "SAC",          qrCode: "CQ-C5V8Z2G4" },
+  { id: "tos",   name: "TOS",          qrCode: "CQ-M1A7E3S6" },
+  { id: "rlh",   name: "RLH",          qrCode: "CQ-U9W4K8P2" },
+];
 
 const W = 1200;
 const QR_SIZE = 700;
 const BORDER = 24;
+const innerGap = 6;
+const totalFrame = QR_SIZE + BORDER * 2 + innerGap * 2 + BORDER;
 
-export const GET = handler(async (_req, { params }) => {
-  if (!(await requireAdmin())) return fail("HQ access only.", 401);
-
-  const { id } = await params;
-
-  const { data, error } = await db()
-    .from("checkpoints")
-    .select("id, name, qr_code")
-    .eq("id", id)
-    .maybeSingle();
-
-  if (error) return fail(error.message, 500);
-  if (!data) return fail("Unknown checkpoint.", 404);
-
-  const qrPng = await QRCode.toBuffer(data.qr_code, {
+async function buildPoster(cp) {
+  const qrPng = await QRCode.toBuffer(cp.qrCode, {
     type: "png",
     errorCorrectionLevel: "H",
     margin: 1,
@@ -35,87 +40,63 @@ export const GET = handler(async (_req, { params }) => {
 
   const frameOuter = QR_SIZE + BORDER * 2;
 
-  // Double gold border: outer gold → gap → inner gold → white → QR
-  const innerGap = 6;
-  const totalFrame = frameOuter + innerGap * 2 + BORDER;
-
   const goldFrame = await sharp({
     create: { width: totalFrame, height: totalFrame, channels: 4,
       background: { r: 212, g: 175, b: 55, alpha: 1 } },
   })
     .composite([
-      // dark gap
       {
         input: await sharp({ create: { width: frameOuter + innerGap * 2, height: frameOuter + innerGap * 2,
           channels: 4, background: { r: 10, g: 15, b: 46, alpha: 1 } } }).png().toBuffer(),
-        top: Math.floor((BORDER) / 2), left: Math.floor((BORDER) / 2),
+        top: Math.floor(BORDER / 2), left: Math.floor(BORDER / 2),
       },
-      // inner gold ring
       {
         input: await sharp({ create: { width: frameOuter, height: frameOuter,
           channels: 4, background: { r: 212, g: 175, b: 55, alpha: 1 } } }).png().toBuffer(),
         top: Math.floor(BORDER / 2) + innerGap, left: Math.floor(BORDER / 2) + innerGap,
       },
-      // white inset
       {
         input: await sharp({ create: { width: QR_SIZE, height: QR_SIZE,
           channels: 4, background: { r: 255, g: 255, b: 255, alpha: 1 } } }).png().toBuffer(),
         top: Math.floor(BORDER / 2) + innerGap + BORDER, left: Math.floor(BORDER / 2) + innerGap + BORDER,
       },
-      // QR
       { input: qrPng, top: Math.floor(BORDER / 2) + innerGap + BORDER, left: Math.floor(BORDER / 2) + innerGap + BORDER },
     ])
     .png()
     .toBuffer();
 
-  // Corner ornament SVG (small diamond shape)
   const CORNER = 28;
   const cornerSvg = Buffer.from(
     `<svg width="${CORNER}" height="${CORNER}" xmlns="http://www.w3.org/2000/svg">
-      <polygon points="${CORNER/2},0 ${CORNER},${CORNER/2} ${CORNER/2},${CORNER} 0,${CORNER/2}"
-        fill="#D4AF37"/>
+      <polygon points="${CORNER/2},0 ${CORNER},${CORNER/2} ${CORNER/2},${CORNER} 0,${CORNER/2}" fill="#D4AF37"/>
     </svg>`
   );
 
-  // Header SVG
   const HEADER_H = 320;
   const headerSvg = Buffer.from(
     `<svg width="${W}" height="${HEADER_H}" xmlns="http://www.w3.org/2000/svg">
-      <!-- Decorative top line pair -->
       <rect x="80" y="40" width="${W - 160}" height="2" fill="#D4AF37" opacity="0.5"/>
       <rect x="80" y="48" width="${W - 160}" height="1" fill="#D4AF37" opacity="0.25"/>
-
-      <!-- UNI GAMES -->
-      <text x="${W / 2}" y="130" font-family="Georgia, 'Times New Roman', serif" font-size="82"
-        font-weight="bold" fill="#D4AF37" text-anchor="middle" letter-spacing="14">UNI GAMES</text>
-
-      <!-- 2026 -->
-      <text x="${W / 2}" y="188" font-family="Georgia, 'Times New Roman', serif" font-size="44"
+      <text x="${W / 2}" y="130" font-family="Georgia, serif" font-size="82" font-weight="bold"
+        fill="#D4AF37" text-anchor="middle" letter-spacing="14">UNI GAMES</text>
+      <text x="${W / 2}" y="188" font-family="Georgia, serif" font-size="44"
         fill="#D4AF37" text-anchor="middle" letter-spacing="20" opacity="0.85">2 0 2 6</text>
-
-      <!-- Thin decorative divider with diamond centre -->
       <rect x="80" y="216" width="${W / 2 - 40}" height="1" fill="#D4AF37" opacity="0.6"/>
       <polygon points="${W/2},208 ${W/2+8},216 ${W/2},224 ${W/2-8},216" fill="#D4AF37"/>
       <rect x="${W / 2 + 40}" y="216" width="${W / 2 - 120}" height="1" fill="#D4AF37" opacity="0.6"/>
-
-      <!-- CONSTRUCTOR QUEST -->
-      <text x="${W / 2}" y="275" font-family="Georgia, 'Times New Roman', serif" font-size="48"
+      <text x="${W / 2}" y="275" font-family="Georgia, serif" font-size="48"
         fill="#FFFFFF" text-anchor="middle" letter-spacing="8">CONSTRUCTOR QUEST</text>
-
-      <!-- website -->
-      <text x="${W / 2}" y="312" font-family="Arial, Helvetica, sans-serif" font-size="24"
+      <text x="${W / 2}" y="312" font-family="Arial, sans-serif" font-size="24"
         fill="#7A8FC4" text-anchor="middle" letter-spacing="2">constructorquest.netlify.app</text>
     </svg>`
   );
 
-  // Footer SVG
   const FOOTER_H = 100;
   const footerSvg = Buffer.from(
     `<svg width="${W}" height="${FOOTER_H}" xmlns="http://www.w3.org/2000/svg">
-      <!-- Bottom line pair -->
       <rect x="80" y="36" width="${W - 160}" height="1" fill="#D4AF37" opacity="0.25"/>
       <rect x="80" y="42" width="${W - 160}" height="2" fill="#D4AF37" opacity="0.5"/>
-      <text x="${W / 2}" y="80" font-family="Arial, Helvetica, sans-serif" font-size="20"
+      <text x="${W / 2}" y="80" font-family="Arial, sans-serif" font-size="20"
         fill="#4A5580" text-anchor="middle" letter-spacing="4">SCAN TO PARTICIPATE</text>
     </svg>`
   );
@@ -124,7 +105,6 @@ export const GET = handler(async (_req, { params }) => {
   const GAP = 36;
   const POSTER_H = PAD_V + HEADER_H + GAP + totalFrame + GAP + FOOTER_H + PAD_V;
 
-  // Background: deep navy with subtle radial glow via a large blurred circle
   const bgSvg = Buffer.from(
     `<svg width="${W}" height="${POSTER_H}" xmlns="http://www.w3.org/2000/svg">
       <defs>
@@ -143,24 +123,42 @@ export const GET = handler(async (_req, { params }) => {
   const qrTop  = PAD_V + HEADER_H + GAP;
   const footerTop = qrTop + totalFrame + GAP;
 
-  const composites = [
-    { input: headerSvg, top: PAD_V, left: 0 },
-    { input: goldFrame, top: qrTop, left: qrLeft },
-    // corner diamonds at QR frame corners
-    { input: cornerSvg, top: qrTop - CORNER / 2, left: qrLeft - CORNER / 2 },
-    { input: cornerSvg, top: qrTop - CORNER / 2, left: qrLeft + totalFrame - CORNER / 2 },
-    { input: cornerSvg, top: qrTop + totalFrame - CORNER / 2, left: qrLeft - CORNER / 2 },
-    { input: cornerSvg, top: qrTop + totalFrame - CORNER / 2, left: qrLeft + totalFrame - CORNER / 2 },
-    { input: footerSvg, top: footerTop, left: 0 },
-  ];
+  return sharp(canvas)
+    .composite([
+      { input: headerSvg, top: PAD_V, left: 0 },
+      { input: goldFrame, top: qrTop, left: qrLeft },
+      { input: cornerSvg, top: qrTop - CORNER / 2, left: qrLeft - CORNER / 2 },
+      { input: cornerSvg, top: qrTop - CORNER / 2, left: qrLeft + totalFrame - CORNER / 2 },
+      { input: cornerSvg, top: qrTop + totalFrame - CORNER / 2, left: qrLeft - CORNER / 2 },
+      { input: cornerSvg, top: qrTop + totalFrame - CORNER / 2, left: qrLeft + totalFrame - CORNER / 2 },
+      { input: footerSvg, top: footerTop, left: 0 },
+    ])
+    .png()
+    .toBuffer();
+}
 
-  const finalPng = await sharp(canvas).composite(composites).png().toBuffer();
+async function main() {
+  const outPath = path.join(ROOT, "qr-posters.pdf");
+  const doc = new PDFDocument({ autoFirstPage: false, margin: 0 });
+  const stream = fs.createWriteStream(outPath);
+  doc.pipe(stream);
 
-  return new Response(new Uint8Array(finalPng), {
-    headers: {
-      "Content-Type": "image/png",
-      "Cache-Control": "no-store",
-      "Content-Disposition": `inline; filename="${data.id}-qr.png"`,
-    },
-  });
-});
+  for (const cp of CHECKPOINTS) {
+    process.stdout.write(`Generating ${cp.name}…`);
+    const png = await buildPoster(cp);
+
+    // A4 landscape in points (842 x 595) — or use portrait A4 (595 x 842)
+    // We use A4 portrait since posters are taller than wide.
+    doc.addPage({ size: "A4", margin: 0 });
+    const { width: pageW, height: pageH } = doc.page;
+    // fit inside the page (no cropping), centred
+    doc.image(png, 0, 0, { fit: [pageW, pageH], align: "center", valign: "center" });
+    console.log(" done");
+  }
+
+  doc.end();
+  await new Promise((res, rej) => { stream.on("finish", res); stream.on("error", rej); });
+  console.log(`\nSaved → ${outPath}`);
+}
+
+main().catch((e) => { console.error(e); process.exit(1); });

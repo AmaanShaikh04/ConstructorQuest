@@ -6,7 +6,7 @@ import Link from "next/link";
 import { MapPin, ArrowLeft, Timer } from "lucide-react";
 import { GoldButton, GhostButton } from "@/components/ui";
 
-export default function LoginScreen({ teams, configError }) {
+export default function LoginScreen({ teams, configError, showLiveLeaderboard }) {
   const router = useRouter();
   const [mode, setMode] = useState(null); // null | 'team' | 'guest' | 'admin'
   const [teamId, setTeamId] = useState("");
@@ -80,6 +80,15 @@ export default function LoginScreen({ teams, configError }) {
             <GhostButton className="py-3 text-base" onClick={() => setMode("guest")}>
               Play as a guest
             </GhostButton>
+            {showLiveLeaderboard && (
+              <Link
+                href="/live"
+                target="_blank"
+                className="flex items-center justify-center gap-2 rounded-lg border border-gold py-3 text-base font-medium text-gold hover:bg-gold/10 transition"
+              >
+                📺 Live leaderboard
+              </Link>
+            )}
             <button
               onClick={() => setMode("admin")}
               className="mt-2 text-xs text-muted hover:text-parchment"
@@ -140,9 +149,9 @@ export default function LoginScreen({ teams, configError }) {
               onChange={(e) => setPin(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && submitTeam()}
               type="password"
-              inputMode="numeric"
+              inputMode="text"
               autoComplete="off"
-              placeholder="4-digit code"
+              placeholder="Passport code"
             />
             {error && <p className="mb-3 text-xs text-rust">{error}</p>}
             <GoldButton className="w-full py-2.5" disabled={busy} onClick={submitTeam}>
@@ -234,7 +243,7 @@ function BackLink({ onClick }) {
       onClick={onClick}
       className="mb-4 flex items-center gap-1 text-xs text-ink-soft hover:underline"
     >
-      <ArrowLeft className="h-3 w-3" /> back
+      <ArrowLeft className="h-3 w-3" /> Back
     </button>
   );
 }

@@ -40,6 +40,7 @@ export async function loadGame() {
       bonus: c.bonus_challenge,
       word: c.word,
       qrCode: c.qr_code,
+      spot: c.spot ?? null,
       order: c.sort_order,
     };
   }
@@ -79,6 +80,7 @@ export async function loadGame() {
         status: b.status,
         submittedAt: b.submitted_at,
         approvedAt: b.approved_at,
+        photoUrl: b.photo_url ?? null,
       })),
       penalties: (penalties[t.id] || []).map((p) => ({
         id: p.id,
@@ -176,6 +178,7 @@ export function teamViewFrom({ checkpoints, teams }, teamId) {
           name: current.name,
           position: team.route.indexOf(current.id) + 1,
           riddle: current.riddle,
+          spot: current.spot,
           bonus: current.bonus,
           // The hint is only sent to the browser once it has been paid for.
           hint: hintedFor.has(current.id) ? current.hint : null,
