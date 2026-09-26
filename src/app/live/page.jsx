@@ -104,7 +104,7 @@ export default function LiveLeaderboard() {
       )}
 
       {/* Waiting state */}
-      {!showCountdown && !gameStarted && rows.every(r => !r.startedAt) && (
+      {!showCountdown && !countdownAt && (
         <p style={{ textAlign: "center", color: "#7A8FC4", fontSize: 22, marginTop: 60 }}>
           Waiting for the event to begin…
         </p>
@@ -180,9 +180,9 @@ export default function LiveLeaderboard() {
                     : "—"}
                 </span>
 
-                {/* Elapsed time */}
+                {/* Elapsed time — only show after game has started */}
                 <span style={{ fontSize: 22, color: "#7A8FC4", fontFamily: "monospace" }}>
-                  {ms != null ? fmt(ms) : "—"}
+                  {countdownAt && ms != null ? fmt(ms) : "—"}
                 </span>
               </div>
             );
